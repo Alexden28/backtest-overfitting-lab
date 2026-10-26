@@ -70,12 +70,47 @@ Growth of 1 is not risk-adjusted: the best variant runs at 5.5% volatility, the 
 | Placebo | Same 512 variants with every signal replaced by Gaussian noise: same holdings, turnover and costs, no information |
 | Alphas | OLS on Mkt-RF, SMB, HML, UMD (from 1930) and adding RMW, CMA (from 1963), Newey-West standard errors with 12 lags |
 
+## Architecture
+
+```mermaid
+flowchart LR
+    FF["Kenneth French library<br/>49 industries, FF5, UMD"] --> grid["512 variants<br/>cross-sectional + time-series"]
+    grid --> M["monthly returns<br/>of every variant"]
+    noise["random signals,<br/>same holdings and costs"] --> P["placebo returns"]
+    M --> DSR["deflated Sharpe ratio<br/>N = 512, 210 or 2.5"]
+    M --> CSCV["CSCV, 12,870 splits<br/>probability of overfitting"]
+    P --> CSCV
+    M --> WF["walk-forward selection<br/>240 months in, 60 out"]
+    WF --> alpha["alpha vs FF3 + UMD<br/>Newey-West"]
+    DSR --> rep["reports/: results.json,<br/>strategies.csv, figures"]
+    CSCV --> rep
+    alpha --> rep
+```
+
+## Performance
+
+Measured on a laptop CPU (AMD Ryzen 9 8940HX), single process, no GPU:
+
+| Stage | Time |
+| --- | --- |
+| 512 backtests on 49 industries, monthly, 1930–2026 | 12 s |
+| One CSCV run, 12,870 train/test splits (vectorised block sums) | 0.5 s |
+| Effective number of trials, walk-forward selection | under 0.1 s |
+| Full pipeline: real and two placebo searches, all statistics, four figures | 44 s, 0.55 GB peak memory |
+
 ## Run it
 
 ```bash
 pip install -e ".[dev]"
-python -m bolab      # about 30 seconds; writes reports/
+python -m bolab      # about 45 seconds; writes reports/
 pytest -q            # 10 tests on synthetic data, no download needed
+```
+
+Or in Docker (CI builds the image and runs the tests inside it on every push):
+
+```bash
+docker build -t bolab .
+docker run --rm -v "$PWD/reports:/app/reports" bolab      # downloads the French data, writes reports/
 ```
 
 ## Limitations
